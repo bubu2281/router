@@ -13,6 +13,12 @@ int main(int argc, char *argv[])
 	// Do not modify this line 
 	init(argc - 2, argv + 2);
 
+	/*Reading rtables*/
+	struct route_table_entry *rtable1 = malloc(sizeof(struct route_table_entry) * 80000);
+	struct route_table_entry *rtable2 = malloc(sizeof(struct route_table_entry) * 80000);
+	read_rtable("rtable0.txt", rtable1);
+	read_rtable("rtable1.txt", rtable2);
+
 
 	while (1) {
 
@@ -56,7 +62,26 @@ int main(int argc, char *argv[])
 		if (ntohs(eth_hdr->ether_type) == ETHER_TYPE_IPV4) {
 			struct iphdr *ip_hdr = (struct iphdr *)(buf + sizeof(struct ether_header));
 
-			
+			/*Checks checksum, if it doesn't check it drops the packet*/
+			if (ntohs(ip_hdr->check) != checksum((uint16_t *)(buf + sizeof(struct ether_header)), ntohs(ip_hdr->tot_len))) {
+				continue;
+			}
+
+			/*TTL
+			If the ttl is 0 or 1 (lower or equal 1) then the packet is dropped
+			If not, the ttl is decremented*/
+			if (ntohs(ip_hdr->ttl) <= 1) {
+				// TODO: ICMP Time exceeded
+				continue;
+			} else {
+				ip_hdr->ttl = htons(ntohs(ip_hdr->ttl) - 1);
+			}
+
+			// TODO: Search rtable
+
+
+			/*Recalculating checksum due to TTL change*/
+			ip_hdr->check = htons(checksum((uint16_t *)(buf + sizeof(struct ether_header)), ntohs(ip_hdr->tot_len)));
 		}
 
 		/*Checks if EtherType is ARP*/
