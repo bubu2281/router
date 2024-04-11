@@ -208,7 +208,7 @@ int main(int argc, char *argv[])
 			uint8_t destination_not_found = 1;
 			uint8_t destination_mac[6];
 			for(int i = 0; i < arp_table_size; i++) {
-				if (ntohl(ip_hdr->daddr) == arp_table[i].ip) {
+				if (ip_hdr->daddr == arp_table[i].ip) {
 					memcpy(destination_mac, arp_table[i].mac, sizeof(uint8_t) * 6);
 					destination_not_found = 0;
 					break;
@@ -273,10 +273,20 @@ int main(int argc, char *argv[])
 				printf("Destination Unreachable. Dropping...");
 				continue;
 			}
+			printf("FOUND ROUTE!!!\n");
 
 			/*Recalculating checksum due to TTL change*/
 			ip_hdr->check = 0;
 			ip_hdr->check = htons(checksum((uint16_t *)(ip_hdr), ntohs(ip_hdr->tot_len)));
+
+
+			memcpy(eth_hdr->ether_shost, eth_hdr->ether_dhost, sizeof(uint8_t) * 6);
+			memcpy(eth_hdr->ether_dhost, destination_mac, sizeof(uint8_t) * 6);
+
+
+			for (int i = 0; i <=2; i++) {
+				send_to_link(i, buf, sizeof(struct ether_header) + (ip_hdr->tot_len/256));
+			}
 		}
 
 		/*Checks if EtherType is ARP*/
