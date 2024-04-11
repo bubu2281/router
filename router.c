@@ -38,6 +38,7 @@ int main(int argc, char *argv[])
 		printf("************\n");
 		interface = recv_from_any_link(buf, &len);
 		DIE(interface < 0, "recv_from_any_links");
+		printf("INTERFACE IS: %u\n", interface);
 
 		struct ether_header *eth_hdr = (struct ether_header *) buf;
 		/* Note that packets received are in network order,
@@ -284,8 +285,10 @@ int main(int argc, char *argv[])
 			memcpy(eth_hdr->ether_dhost, destination_mac, sizeof(uint8_t) * 6);
 
 
-			for (int i = 0; i <=2; i++) {
-				send_to_link(i, buf, sizeof(struct ether_header) + (ip_hdr->tot_len/256));
+			if (interface == 2) {
+				send_to_link(1, buf, sizeof(struct ether_header) + (ip_hdr->tot_len/256));
+			} else {
+				send_to_link(2, buf, sizeof(struct ether_header) + (ip_hdr->tot_len/256));
 			}
 		}
 
