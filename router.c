@@ -86,7 +86,7 @@ int main(int argc, char *argv[])
 				,(ntohl(ip_hdr->daddr) >> 24) & 255 ,(ntohl(ip_hdr->daddr) >> 16) & 255, (ntohl(ip_hdr->daddr) >> 8) & 255, (ntohl(ip_hdr->daddr) >> 0) & 255);
 				printf("icmp type: %u\n", icmp_hdr->type);
 				/*Checks if it's an echo reply for us*/
-				if (interface_ip == ip_hdr->daddr && icmp_hdr->type == 8) {
+				if (interface_ip == ip_hdr->daddr && icmp_hdr->type == 8) { 
 					/*ICMP Echo Reply*/
 
 				/*Swap in ether header source mac with destination mac*/
@@ -122,6 +122,7 @@ int main(int argc, char *argv[])
 				printf("Ether type: %u\n", eth_hdr->ether_type);
 				printf("Iphdr checksum: %u\n", ip_hdr->check);
 				printf("Iphdr protocol: %u\n", ip_hdr->protocol);
+				printf("Iphdr time to live: %u\n", ip_hdr->ttl);
 				printf("src ip: %d.%d.%d.%d   dest ip: %d.%d.%d.%d\n", (ntohl(ip_hdr->saddr) >> 24) & 255, (ntohl(ip_hdr->saddr) >> 16) & 255, (ntohl(ip_hdr->saddr) >> 8) & 255, (ntohl(ip_hdr->saddr) >> 0) & 255
 				,(ntohl(ip_hdr->daddr) >> 24) & 255 ,(ntohl(ip_hdr->daddr) >> 16) & 255, (ntohl(ip_hdr->daddr) >> 8) & 255, (ntohl(ip_hdr->daddr) >> 0) & 255);
 				printf("Iphdr tot len: %u\n", ip_hdr->tot_len);
@@ -141,40 +142,62 @@ int main(int argc, char *argv[])
 			/*TTL
 			If the ttl is 0 or 1 (lower or equal 1) then the packet is dropped
 			If not, the ttl is decremented*/
-			if (ntohs(ip_hdr->ttl) <= 1) {
+			printf("!!!!Iphdr time to live: %u\n", ip_hdr->ttl);
+			if (ip_hdr->ttl <= 1) {
 				
 				/*ICMP Time excedeed*/
 
+				
 				/*Swap in ether header source mac with destination mac*/
 				uint8_t tmp[6];
 				memcpy(tmp, eth_hdr->ether_shost, sizeof(uint8_t) * 6);
 				memcpy(eth_hdr->ether_shost, eth_hdr->ether_dhost, sizeof(uint8_t) * 6);
 				memcpy(eth_hdr->ether_dhost, tmp, sizeof(uint8_t) * 6);
 
+				/*Internet Header + 64 bits of Original Data Datagram */
+				struct icmphdr *icmp_hdr = (struct icmphdr *)((char *)ip_hdr + sizeof(struct iphdr));
+				memcpy((char *)icmp_hdr + sizeof(struct icmphdr), ip_hdr, sizeof(struct iphdr) + 8);
 
+				printf("iphdr original len: %u\n", ip_hdr->tot_len);
 				/*Modify the ip header accordingly*/
-				ip_hdr->protocol = htons(1); //icmp protocol
-				ip_hdr->tot_len = htons(sizeof(struct iphdr) + sizeof(struct icmphdr));  //new total length iphdr + icmphdr
-				ip_hdr->ttl = htons(64);
+				ip_hdr->protocol = 1; //icmp protocol
+				ip_hdr->tot_len = htons(sizeof(struct iphdr) + sizeof(struct icmphdr) + sizeof(struct iphdr) + 8); // Internet Header + 64 bits of Original Data Datagram 
+				ip_hdr->ttl = 64;
 				ip_hdr->daddr = ip_hdr->saddr;
-				ip_hdr->saddr = htonl(inet_addr(get_interface_ip(interface)));
-				ip_hdr->tot_len = htons(sizeof(struct iphdr) + sizeof(struct icmphdr));
+				ip_hdr->saddr = inet_addr(get_interface_ip(interface));
 				ip_hdr->check = 0;
 
 
 				/*ICMP header*/
-				struct icmphdr *icmp_hdr = (struct icmphdr *)((char *)ip_hdr + sizeof(ip_hdr));
-				icmp_hdr->code = htons(0);
-				icmp_hdr->type = htons(11);
+				icmp_hdr->code = 0;
+				icmp_hdr->type = 11;
+				icmp_hdr->un.gateway = 0;
 				icmp_hdr->checksum = 0;
-				icmp_hdr->checksum = htons(checksum((uint16_t *)icmp_hdr, sizeof(struct icmphdr)));
+				icmp_hdr->checksum = htons(checksum((uint16_t *)icmp_hdr, (ip_hdr->tot_len/256) - sizeof(struct iphdr)));
 
 
 				/*Sending packet*/
-				send_to_link(interface, (char *)eth_hdr, sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct icmphdr));
+				send_to_link(interface, buf, sizeof(struct ether_header) + (ip_hdr->tot_len/256));
+
+				printf("Sending packet...\n");
+				printf("//////////////////\n");
+				printf("MAC src: %02x:%02x:%02x:%02x:%02x:%02x\n", eth_hdr->ether_shost[0], eth_hdr->ether_shost[1], eth_hdr->ether_shost[2], eth_hdr->ether_shost[3], eth_hdr->ether_shost[4], eth_hdr->ether_shost[5] );
+				printf("MAC dst: %02x:%02x:%02x:%02x:%02x:%02x\n", eth_hdr->ether_dhost[0], eth_hdr->ether_dhost[1], eth_hdr->ether_dhost[2], eth_hdr->ether_dhost[3], eth_hdr->ether_dhost[4], eth_hdr->ether_dhost[5] );
+				printf("Ether type: %u\n", eth_hdr->ether_type);
+				printf("Iphdr checksum: %u\n", ip_hdr->check);
+				printf("Iphdr protocol: %u\n", ip_hdr->protocol);
+				printf("Iphdr version: %u\n", ip_hdr->version);
+				printf("Iphdr time to live: %u\n", ip_hdr->ttl);
+				printf("src ip: %d.%d.%d.%d   dest ip: %d.%d.%d.%d\n", (ntohl(ip_hdr->saddr) >> 24) & 255, (ntohl(ip_hdr->saddr) >> 16) & 255, (ntohl(ip_hdr->saddr) >> 8) & 255, (ntohl(ip_hdr->saddr) >> 0) & 255
+				,(ntohl(ip_hdr->daddr) >> 24) & 255 ,(ntohl(ip_hdr->daddr) >> 16) & 255, (ntohl(ip_hdr->daddr) >> 8) & 255, (ntohl(ip_hdr->daddr) >> 0) & 255);
+				printf("Iphdr tot len: %u\n", ip_hdr->tot_len);
+				printf("ICMP code: %u   ICMP type: %u\n", icmp_hdr->code, icmp_hdr->type);
+				printf("ICMP checksum: %u\n", icmp_hdr->checksum);
+				printf("//////////////////\n");
 
 				printf("Time exceeded. Dropping...\n");
 				continue;
+				
 			} else {
 				ip_hdr->ttl = htons(ntohs(ip_hdr->ttl) - 1);
 			}
@@ -241,4 +264,3 @@ int main(int argc, char *argv[])
 
 	}
 }
-
