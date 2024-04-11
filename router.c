@@ -8,7 +8,35 @@
 #define ETHER_TYPE_ARP 0X806
 
 
+int cmp_rtable(const void *a, const void *b) {
+	struct route_table_entry *entry1 = (struct route_table_entry *)a;
+	struct route_table_entry *entry2 = (struct route_table_entry *)b;
+	if ((entry1->prefix) < (entry2->prefix)) {
+		return -1;
+	} else if ((entry1->prefix) > (entry2->prefix)) {
+		return 1;
+	} else if ((entry1->mask) <= (entry2->mask)) {
+		return -1;
+	} else {
+		return 1;
+	}
+}
 
+
+
+int binarySearch(struct route_table_entry *rtable, int l, int r, uint32_t x)
+{
+    if (r >= l) {
+        int mid = l + (r - l) / 2;
+        // if (rtable[mid].prefix == (x & rtable[mid].mask) )
+		if (rtable[mid].prefix == (x & htonl(0xffffff00)) && rtable[mid].mask == htonl(0xffffff00))
+            return mid;
+        if (rtable[mid].prefix > (x & htonl(0xffffff00)) || rtable[mid].mask > htonl(0xffffff00))
+            return binarySearch(rtable, l, mid - 1, x);
+        return binarySearch(rtable, mid + 1, r, x);
+    }
+    return -1;
+}
 
 
 int main(int argc, char *argv[])
@@ -27,7 +55,16 @@ int main(int argc, char *argv[])
 	int arp_table_size = parse_arp_table("arp_table.txt", arp_table);
 	/**/
 
-	printf("%d", rtable[123].prefix);
+	/*Sorting rtable*/
+	qsort(rtable, rtable_size, sizeof(struct route_table_entry), cmp_rtable);
+
+	for(int i = 0; i < 100; i++) {
+		printf("prefix: %d.%d.%d.%d  next hop: %d.%d.%d.%d  ", (ntohl(rtable[i].prefix) >> 24) & 255, (ntohl(rtable[i].prefix) >> 16) & 255, (ntohl(rtable[i].prefix) >> 8) & 255,
+			(ntohl(rtable[i].prefix) >> 0) & 255, (ntohl(rtable[i].next_hop) >> 24) & 255 ,(ntohl(rtable[i].next_hop) >> 16) & 255, (ntohl(rtable[i].next_hop) >> 8) & 255, (ntohl(rtable[i].next_hop) >> 0) & 255);
+		printf("mask: %d.%d.%d.%d  interface: %d  \n", (ntohl(rtable[i].mask) >> 24) & 255, (ntohl(rtable[i].mask) >> 16) & 255, (ntohl(rtable[i].mask) >> 8) & 255,
+		(ntohl(rtable[i].mask) >> 0) & 255, rtable[i].interface);
+	}
+
 
 
 	while (1) {
@@ -207,17 +244,28 @@ int main(int argc, char *argv[])
 			printf("Searching the ARP table...\n");
 			/*Searching the static ARP table*/
 			uint8_t destination_not_found = 1;
-			uint8_t destination_mac[6];
-			for(int i = 0; i < arp_table_size; i++) {
-				if (ip_hdr->daddr == arp_table[i].ip) {
-					memcpy(destination_mac, arp_table[i].mac, sizeof(uint8_t) * 6);
-					destination_not_found = 0;
-					break;
-				}
-			}
+			// uint8_t destination_mac[6];
+			// for(int i = 0; i < arp_table_size; i++) {
+			// 	if (ip_hdr->daddr == arp_table[i].ip) {
+			// 		memcpy(destination_mac, arp_table[i].mac, sizeof(uint8_t) * 6);
+			// 		destination_not_found = 0;
+			// 		break;2
+			// 	}
+			// }
 			/**/
 
-			// TODO: Search rtable
+			/*Searching rtable*/
+			int rtable_index = binarySearch(rtable, 0, rtable_size - 1, ip_hdr->daddr);
+			if (rtable_index >= 0) {
+				destination_not_found = 0;
+			}
+			uint8_t destination_mac[6];
+			get_interface_mac(rtable[rtable_index].interface, destination_mac);
+			printf("RTABLE INDEX: %d   intreface: %u\n", rtable_index, rtable[rtable_index].interface);
+			printf("next hop ip: %d.%d.%d.%d   dest ip: %d.%d.%d.%d\n", (ntohl(rtable[rtable_index].next_hop) >> 24) & 255, (ntohl(rtable[rtable_index].next_hop) >> 16) & 255, (ntohl(rtable[rtable_index].next_hop) >> 8) & 255,
+			(ntohl(rtable[rtable_index].next_hop) >> 0) & 255, (ntohl(ip_hdr->daddr) >> 24) & 255 ,(ntohl(ip_hdr->daddr) >> 16) & 255, (ntohl(ip_hdr->daddr) >> 8) & 255, (ntohl(ip_hdr->daddr) >> 0) & 255);
+			printf("mask ip: %d.%d.%d.%d   \n", (ntohl(rtable[rtable_index].mask) >> 24) & 255, (ntohl(rtable[rtable_index].mask) >> 16) & 255, (ntohl(rtable[rtable_index].mask) >> 8) & 255,
+			(ntohl(rtable[rtable_index].mask) >> 0) & 255);
 
 			if (destination_not_found) {
 
@@ -285,11 +333,8 @@ int main(int argc, char *argv[])
 			memcpy(eth_hdr->ether_dhost, destination_mac, sizeof(uint8_t) * 6);
 
 
-			if (interface == 2) {
-				send_to_link(1, buf, sizeof(struct ether_header) + (ip_hdr->tot_len/256));
-			} else {
-				send_to_link(2, buf, sizeof(struct ether_header) + (ip_hdr->tot_len/256));
-			}
+			send_to_link(rtable[rtable_index].interface, buf, sizeof(struct ether_header) + (ip_hdr->tot_len/256));
+
 		}
 
 		/*Checks if EtherType is ARP*/
@@ -298,4 +343,7 @@ int main(int argc, char *argv[])
 		}
 
 	}
+
+
+
 }
