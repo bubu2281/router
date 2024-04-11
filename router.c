@@ -84,8 +84,8 @@ int main(int argc, char *argv[])
 		sending a packet on the link, */
 
 		/*Gets the interfaces' MAC address*/
-		// uint8_t *interface_mac = malloc(6 * sizeof(uint8_t));
-		// get_interface_mac(interface, interface_mac);
+		uint8_t *interface_mac = malloc(6 * sizeof(uint8_t));
+		get_interface_mac(interface, interface_mac);
 
 		// /*Verifies if the packet is valid or not'*/
 		// uint8_t packet_not_valid = 0;
@@ -185,12 +185,20 @@ int main(int argc, char *argv[])
 				
 				/*ICMP Time excedeed*/
 
+
+				uint8_t dest_mac[6];
+				for(int i = 0; i < arp_table_size; i++) {
+					if (ip_hdr->daddr == arp_table[i].ip) {
+						memcpy(dest_mac, arp_table[i].mac, sizeof(uint8_t) * 6);
+						break;
+					}
+				}
 				
 				/*Swap in ether header source mac with destination mac*/
-				uint8_t tmp[6];
-				memcpy(tmp, eth_hdr->ether_shost, sizeof(uint8_t) * 6);
-				memcpy(eth_hdr->ether_shost, eth_hdr->ether_dhost, sizeof(uint8_t) * 6);
-				memcpy(eth_hdr->ether_dhost, tmp, sizeof(uint8_t) * 6);
+				// uint8_t tmp[6];
+				// memcpy(tmp, eth_hdr->ether_shost, sizeof(uint8_t) * 6);
+				memcpy(eth_hdr->ether_dhost, eth_hdr->ether_shost, sizeof(uint8_t) * 6);
+				memcpy(eth_hdr->ether_shost, interface_mac, sizeof(uint8_t) * 6);
 
 				/*Internet Header + 64 bits of Original Data Datagram */
 				struct icmphdr *icmp_hdr = (struct icmphdr *)((char *)ip_hdr + sizeof(struct iphdr));
@@ -252,7 +260,6 @@ int main(int argc, char *argv[])
 			// 		break;2
 			// 	}
 			// }
-			/**/
 
 			/*Searching rtable*/
 			int rtable_index = binarySearch(rtable, 0, rtable_size - 1, ip_hdr->daddr);
@@ -261,6 +268,8 @@ int main(int argc, char *argv[])
 			}
 			uint8_t destination_mac[6];
 			get_interface_mac(rtable[rtable_index].interface, destination_mac);
+
+
 			printf("RTABLE INDEX: %d   intreface: %u\n", rtable_index, rtable[rtable_index].interface);
 			printf("next hop ip: %d.%d.%d.%d   dest ip: %d.%d.%d.%d\n", (ntohl(rtable[rtable_index].next_hop) >> 24) & 255, (ntohl(rtable[rtable_index].next_hop) >> 16) & 255, (ntohl(rtable[rtable_index].next_hop) >> 8) & 255,
 			(ntohl(rtable[rtable_index].next_hop) >> 0) & 255, (ntohl(ip_hdr->daddr) >> 24) & 255 ,(ntohl(ip_hdr->daddr) >> 16) & 255, (ntohl(ip_hdr->daddr) >> 8) & 255, (ntohl(ip_hdr->daddr) >> 0) & 255);
@@ -329,8 +338,21 @@ int main(int argc, char *argv[])
 			ip_hdr->check = htons(checksum((uint16_t *)(ip_hdr), ntohs(ip_hdr->tot_len)));
 
 
-			memcpy(eth_hdr->ether_shost, eth_hdr->ether_dhost, sizeof(uint8_t) * 6);
-			memcpy(eth_hdr->ether_dhost, destination_mac, sizeof(uint8_t) * 6);
+			uint8_t next_hop_mac[6];
+			for(int i = 0; i < arp_table_size; i++) {
+				if (rtable[rtable_index].next_hop == arp_table[i].ip) {
+					memcpy(next_hop_mac, arp_table[i].mac, sizeof(uint8_t) * 6);
+					break;
+				}
+			}
+
+			memcpy(eth_hdr->ether_shost, destination_mac, sizeof(uint8_t) * 6);
+			memcpy(eth_hdr->ether_dhost, next_hop_mac, sizeof(uint8_t) * 6);
+
+			printf("MAC src: %02x:%02x:%02x:%02x:%02x:%02x\n", eth_hdr->ether_shost[0], eth_hdr->ether_shost[1], eth_hdr->ether_shost[2], eth_hdr->ether_shost[3], eth_hdr->ether_shost[4], eth_hdr->ether_shost[5] );
+			printf("MAC dst: %02x:%02x:%02x:%02x:%02x:%02x\n", eth_hdr->ether_dhost[0], eth_hdr->ether_dhost[1], eth_hdr->ether_dhost[2], eth_hdr->ether_dhost[3], eth_hdr->ether_dhost[4], eth_hdr->ether_dhost[5] );
+			printf("interface:%d    ip: %d.%d.%d.%d   \n", rtable[rtable_index].interface, (ntohl(rtable[rtable_index].mask) >> 24) & 255, (ntohl(rtable[rtable_index].mask) >> 16) & 255, (ntohl(rtable[rtable_index].mask) >> 8) & 255,
+			(ntohl(rtable[rtable_index].mask) >> 0) & 255);
 
 
 			send_to_link(rtable[rtable_index].interface, buf, sizeof(struct ether_header) + (ip_hdr->tot_len/256));
