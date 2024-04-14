@@ -1,0 +1,25 @@
+implementarea temei a fost facuta exact cum a fost descrisa in enuntul temei
+
+pentru partea de ipv4, verifică dacă el este destinația, dupa care se verifica
+checksum-ul daca este corect in continuare se verifica ttl-ul si daca este indeajuns
+, se scade se face cautarea in tabela de rutare, se actualizeaza checksum-ul si in 
+final se rescriu adresele ethernet headerului
+
+functia de cautare a celei mai bune rute este efectuata cu ajutorul unui binary
+search pentru a micsora complexitatea din o(n) in o(log n)
+
+atunci cand incercam sa trimitem pachetul mai departe daca nu se gaseste in,
+arp table adresa mac corespunzatoare, se salveaza pachetul pentru mai tarziu
+si se trimite un arp request pe adresa de broadcast, iar in momentul in care
+se primeste reply se cauta in coada de pachete in asteptare si se trimite pachetul
+
+
+in coada de pachete ce sunt in asteptare de un arp reply am introdus structuri
+de tipul packet ce contineau interfata pe care trebuia pachetul trimis, frameul,
+lungimea, si ip-ul next-hopului. iar cand primesc un arp reply trec prin toata coada
+verificand daca vreunul din pachete are nevoie de acel mac
+
+pentru mesajele icmp de tip time-out si unreachable, verificam daca ttl-ul a expirat,
+sau daca nu se gasea o ruta catre destinatie si modificam icmp-ul primit astfel
+incat sa trimita eroarea respectiva.
+
